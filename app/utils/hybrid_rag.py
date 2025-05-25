@@ -93,8 +93,9 @@ def pdf_to_documents(pdf_path, organisation_id):
     except Exception as e:
         print(f"Error processing PDF: {e}")
 
-
 def hybrid_search(query, organisation_id, top_k=3, score_threshold=0):
+    from flask import session  # Import session here
+
     # Check if the index exists
     if not es.indices.exists(index=index_name):
         print(f"Index '{index_name}' does not exist.")
@@ -102,12 +103,18 @@ def hybrid_search(query, organisation_id, top_k=3, score_threshold=0):
     else:
         print(f"Index '{index_name}' found.")
 
-    # BM25 Search
+    # Get user region from session
+    user_region = session.get('region')
+
+    # BM25 Search with region filter
     bm25_query = {
         "query": {
             "bool": {
                 "must": [{"match": {"text": query}}],
-                "filter": [{"term": {"organisation_id": organisation_id}}]
+                "filter": [
+                    {"term": {"organisation_id": organisation_id}},
+                    {"term": {"region": user_region}}  # Add region filter
+                ]
             }
         }
     }
@@ -120,14 +127,17 @@ def hybrid_search(query, organisation_id, top_k=3, score_threshold=0):
         print(f"BM25 search failed: {e}")
         bm25_results = {}
 
-    # Semantic Search
+    # Semantic Search with region filter
     query_embedding = embedding_model.encode(query).tolist()
     semantic_query = {
         "query": {
             "script_score": {
                 "query": {
                     "bool": {
-                        "filter": [{"term": {"organisation_id": organisation_id}}]
+                        "filter": [
+                            {"term": {"organisation_id": organisation_id}},
+                            {"term": {"region": user_region}}  # Add region filter
+                        ]
                     }
                 },
                 "script": {
@@ -137,7 +147,6 @@ def hybrid_search(query, organisation_id, top_k=3, score_threshold=0):
             }
         }
     }
-
     try:
         semantic_response = es.search(index=index_name, body=semantic_query, size=top_k)
         semantic_results = {
@@ -147,22 +156,13 @@ def hybrid_search(query, organisation_id, top_k=3, score_threshold=0):
         print(f"Semantic search failed: {e}")
         semantic_results = {}
 
-    # Fuse Scores (assuming reciprocal_rank_fusion returns a dict mapping doc_id to a fused score)
+    # Rest of the function (fused scores, sorting, document retrieval) remains unchanged
     fused_scores = reciprocal_rank_fusion(bm25_results, semantic_results)
     sorted_results = sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
     print("Fused Scores:", fused_scores)
     print("Sorted Results:", sorted_results)
 
-    # print("sorted_results", sorted_results)
-
-    # # Collect doc IDs that meet the score threshold
     valid_doc_ids = [doc_id for doc_id, score in sorted_results]
-    # if not valid_doc_ids:
-    #     print("No documents passed the score threshold.")
-    #     return ""
-
-    # Retrieve documents in bulk using mget.
-    # (If your mapping disables _source, replace _source_includes with stored_fields and adjust accordingly.)
     try:
         docs_response = es.mget(
             index=index_name,
@@ -173,10 +173,8 @@ def hybrid_search(query, organisation_id, top_k=3, score_threshold=0):
         print(f"Error fetching documents: {e}")
         return ""
 
-    # Extract the "text" field from each returned document.
     result_texts = []
     for doc in docs_response.get("docs", []):
-        # Make sure _source exists and contains "text"
         source = doc.get("_source", {})
         text = source.get("text")
         if text:

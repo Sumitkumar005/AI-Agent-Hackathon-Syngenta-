@@ -384,6 +384,21 @@ class Docs(db.Model):
     #     db.session.add(admin)
     #     db.session.commit()
 
+class User(db.Model):
+    __TableName__ = 'users'
+    userid = db.Column(db.Integer, primary_key=True, autoincrement=True, nullable=False, unique=True)
+    firstname = db.Column(db.String(20), nullable=False)
+    lastname = db.Column(db.String(20))
+    email = db.Column(db.String(50), nullable=False, unique=True)
+    username = db.Column(db.String(50), nullable=False, unique=True)
+    passhash = db.Column(db.String(1024), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default='user')
+    organization = db.Column(db.Integer, db.ForeignKey('organizations.orgid'), nullable=True)
+    github_id = db.Column(db.String(200), nullable=True)
+    region = db.Column(db.String(50), nullable=False)  # New field for geographic control, e.g., "India", "USA"
+    
+    
+
 class CustomerSupport(db.Model):
     __tablename__ = 'customersupport'
     supportid = db.Column(db.Integer, primary_key=True, autoincrement=True, nullable=False, unique=True)

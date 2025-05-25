@@ -160,6 +160,35 @@ def user_dashboard():
     
     return render_template('user_dashboard.html', questions=questions,nav="User Dashboard")
 
+@user_bpt.route('/login', methods=['GET', 'POST'])
+def login():
+    if session.get('user_id'):
+        if User.query.filter_by(userid=session.get('user_id')).first().role == 'moderator':
+            return redirect(url_for('moderator.moderator_dashboard'))
+        return redirect(url_for('user.user_dashboard'))
+    if session.get('org_id'):
+        return redirect(url_for('organization.organization_dashboard'))
+    if request.method == 'POST':
+        role = request.form.get('role')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        if role == 'user':
+            user = User.query.filter_by(email=email).first()
+            if user and check_password_hash(user.passhash, password):
+                session['user_id'] = user.userid
+                session['role'] = user.role  # Store role in session
+                session['region'] = user.region  # Store region in session
+                if user.role == 'moderator':
+                    flash(['Moderator login successful!', 'success'])
+                    return redirect(url_for('moderator.moderator_dashboard'))
+                elif user.role == 'user':
+                    flash(['User login successful!', 'success'])
+                    return redirect(url_for('user.user_dashboard'))
+            # Rest of the code remains unchanged
+        # Rest of the function remains unchanged
+    return render_template('login.html', nav="Login")
+
 
 @user_bpt.route('/myquestions',methods=['GET'])
 @role_required('user')

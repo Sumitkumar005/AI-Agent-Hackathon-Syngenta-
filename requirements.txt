@@ -70,3 +70,5 @@ tensorflow-intel
 langchain
 python-dotenv
 langchain-google-genai
+pandas
+sqlalchemy
