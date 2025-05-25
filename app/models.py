@@ -384,6 +384,9 @@ class Docs(db.Model):
     #     db.session.add(admin)
     #     db.session.commit()
 
+from flask_sqlalchemy import SQLAlchemy
+db = SQLAlchemy()
+
 class User(db.Model):
     __TableName__ = 'users'
     userid = db.Column(db.Integer, primary_key=True, autoincrement=True, nullable=False, unique=True)
@@ -395,8 +398,44 @@ class User(db.Model):
     role = db.Column(db.String(20), nullable=False, default='user')
     organization = db.Column(db.Integer, db.ForeignKey('organizations.orgid'), nullable=True)
     github_id = db.Column(db.String(200), nullable=True)
-    region = db.Column(db.String(50), nullable=False)  # New field for geographic control, e.g., "India", "USA"
-    
+    region = db.Column(db.String(50), nullable=False)  # For geographic control
+
+    def check_password(self, password):
+        return check_password_hash(self.passhash, password)
+
+class SupplyChain(db.Model):
+    __tablename__ = 'supply_chain'
+    id = db.Column(db.Integer, primary_key=True)
+    payment_type = db.Column(db.String(20))  # DEBIT, TRANSFER, CASH, PAYMENT
+    days_for_shipping_real = db.Column(db.Integer)
+    days_for_shipment_scheduled = db.Column(db.Integer)
+    benefit_per_order = db.Column(db.Float)
+    sales_per_customer = db.Column(db.Float)
+    delivery_status = db.Column(db.String(50))
+    late_delivery_risk = db.Column(db.Integer)
+    category_id = db.Column(db.Integer)
+    category_name = db.Column(db.String(100))
+    customer_city = db.Column(db.String(100))
+    customer_country = db.Column(db.String(100))
+    customer_segment = db.Column(db.String(50))
+    customer_state = db.Column(db.String(50))
+    customer_zipcode = db.Column(db.Integer)
+    department_id = db.Column(db.Integer)
+    department_name = db.Column(db.String(100))
+    market = db.Column(db.String(50))
+    order_city = db.Column(db.String(100))
+    order_country = db.Column(db.String(100))
+    order_region = db.Column(db.String(50))  # For geographic filtering
+    order_date = db.Column(db.String(50))
+    order_item_product_price = db.Column(db.Float)
+    order_item_quantity = db.Column(db.Integer)
+    sales = db.Column(db.Float)
+    order_item_total = db.Column(db.Float)
+    order_profit_per_order = db.Column(db.Float)
+    product_name = db.Column(db.String(100))
+    shipping_mode = db.Column(db.String(50))
+
+# Other models (Questions, Answers, etc.) remain unchanged
     
 
 class CustomerSupport(db.Model):

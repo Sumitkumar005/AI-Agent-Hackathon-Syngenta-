@@ -66,7 +66,7 @@ def classify_query(query):
     query_lower = query.lower()
     if any(keyword in query_lower for keyword in ["policy", "definition", "guideline", "procedure"]):
         return "document"
-    elif any(keyword in query_lower for keyword in ["total", "how many", "inventory", "sales", "value"]):
+    elif any(keyword in query_lower for keyword in ["total", "how many", "inventory", "sales", "value", "debit", "cash", "transfer", "payment"]):
         return "database"
     elif ("policy" in query_lower or "definition" in query_lower) and ("total" in query_lower or "how many" in query_lower or "value" in query_lower):
         return "hybrid"
@@ -112,13 +112,13 @@ def handle_hybrid_query(query, org_id):
     doc_context = hybrid_search(query, org_id)
     query_lower = query.lower()
     if "no-movers" in query_lower and "policy" in query_lower:
-        sql = "SELECT SUM(current_value) FROM supply_chain WHERE last_sale_date < CURRENT_DATE - INTERVAL '180 days'"
+        sql = "SELECT SUM(order_item_total) FROM supply_chain WHERE order_date < CURRENT_DATE - INTERVAL '180 days'"
         result = execute_sql(sql)
         return f"Policy: {doc_context}\nDatabase: Found items with total value {result} that are no-movers (unsold for 180 days)."
-    elif "ethical sourcing" in query_lower and "suppliers" in query_lower:
-        sql = "SELECT COUNT(*) FROM supply_chain WHERE ethical_compliance = 'No'"
+    elif "debit" in query_lower and "policy" in query_lower:
+        sql = f"SELECT COUNT(*) FROM supply_chain WHERE payment_type = 'DEBIT'"
         result = execute_sql(sql)
-        return f"Policy: {doc_context}\nDatabase: {result} suppliers do not meet ethical sourcing requirements."
+        return f"Policy: {doc_context}\nDatabase: {result} orders were paid using DEBIT."
     return f"Document context: {doc_context}\nDatabase info not applicable."
 
 def generate_insights(response):
@@ -159,16 +159,12 @@ def chatbot():
         if is_toxic:
             return jsonify({"reply": "Sorry, the input is inappropriate."}), 400
 
-        # Role-based access control example
-        if "profit margin" in user_message.lower() and user_role != "Finance":
-            return jsonify({"reply": "Access denied: Only Finance users can view profit margins."}), 403
-
         # Classify and route the query
         query_type = classify_query(user_message)
         if query_type == "document":
             response = handle_document_query(user_message, org_id)
         elif query_type == "database":
-            response = handle_database_query(user_message, user_region)  # Pass region to filter
+            response = handle_database_query(user_message, user_region, user_role)  # Pass role
         elif query_type == "hybrid":
             response = handle_hybrid_query(user_message, org_id)
         else:
@@ -178,7 +174,7 @@ def chatbot():
         insights = generate_insights(response)
         final_response = f"{response}\n\n**Insights:** {insights}"
 
-        # Save interaction (unchanged)
+        # Save interaction
         conversation.append({
             "sender": "Bot",
             "message": final_response,
@@ -201,23 +197,36 @@ def chatbot():
         print(f"Error in chatbot API: {e}")
         return jsonify({"error": "An error occurred"}), 500
 
-def handle_database_query(query, region):
-    """Handle database queries with geographic filtering."""
+def handle_database_query(query, region, role):
+    """Handle database queries with geographic and role-based filtering."""
     query_lower = query.lower()
-    # Filter by region in SQL queries
+    
+    # Role-based access control
+    if any(keyword in query_lower for keyword in ["profit", "benefit"]) and role != "Finance":
+        return "Access denied: Only Finance users can view profit-related data."
+    
+    # Map query to SQL with region filter
     if "total sales amount" in query_lower:
-        sql = f"SELECT SUM(sales_amount) FROM supply_chain WHERE region = '{region}'"
+        if "debit" in query_lower:
+            sql = f"SELECT SUM(sales) FROM supply_chain WHERE order_region = '{region}' AND payment_type = 'DEBIT'"
+        elif "cash" in query_lower:
+            sql = f"SELECT SUM(sales) FROM supply_chain WHERE order_region = '{region}' AND payment_type = 'CASH'"
+        elif "transfer" in query_lower:
+            sql = f"SELECT SUM(sales) FROM supply_chain WHERE order_region = '{region}' AND payment_type = 'TRANSFER'"
+        elif "payment" in query_lower:
+            sql = f"SELECT SUM(sales) FROM supply_chain WHERE order_region = '{region}' AND payment_type = 'PAYMENT'"
+        else:
+            sql = f"SELECT SUM(sales) FROM supply_chain WHERE order_region = '{region}'"
     elif "inventory" in query_lower and "no-movers" not in query_lower:
-        sql = f"SELECT COUNT(*) FROM supply_chain WHERE stock > 0 AND region = '{region}'"
+        sql = f"SELECT COUNT(*) FROM supply_chain WHERE stock > 0 AND order_region = '{region}'"
     elif "southwest region" in query_lower and "sales" in query_lower:
         if region != "Southwest":
             return "Access denied: You can only view data for your region."
-        sql = "SELECT SUM(sales_amount) FROM supply_chain WHERE region = 'Southwest'"
+        sql = f"SELECT SUM(sales) FROM supply_chain WHERE order_region = 'Southwest'"
     else:
-        sql = f"SELECT COUNT(*) FROM supply_chain WHERE region = '{region}'"  # Fallback
+        sql = f"SELECT COUNT(*) FROM supply_chain WHERE order_region = '{region}'"  # Fallback
     result = execute_sql(sql)
     return f"Database result: {result}" if result is not None else "No data found."
-
 
 
 # Keep existing routes unchanged
